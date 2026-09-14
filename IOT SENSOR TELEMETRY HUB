@@ -1,0 +1,225 @@
+# Install packages (first time only)
+install.packages("shiny")
+
+library(shiny)
+
+# -------------------------------
+# S3 OBJECT CREATION
+# -------------------------------
+
+create_drone <- function(distance, load) {
+  structure(
+    list(distance = distance, load = load),
+    class = "drone"
+  )
+}
+
+create_truck <- function(distance, load) {
+  structure(
+    list(distance = distance, load = load),
+    class = "truck"
+  )
+}
+
+create_ev <- function(distance, battery) {
+  structure(
+    list(distance = distance, battery = battery),
+    class = "ev"
+  )
+}
+
+# -------------------------------
+# S3 GENERIC FUNCTION
+# -------------------------------
+
+dispatch <- function(vehicle) {
+  UseMethod("dispatch")
+}
+
+# Drone dispatch method
+dispatch.drone <- function(vehicle) {
+  speed <- 80
+  time <- vehicle$distance / speed * 60
+  
+  list(
+    vehicle = "Drone",
+    delivery_time = round(time, 1),
+    route = "Direct aerial route",
+    parameter = "Light-weight payload"
+  )
+}
+
+# Truck dispatch method
+dispatch.truck <- function(vehicle) {
+  speed <- 50
+  time <- vehicle$distance / speed * 60
+  
+  list(
+    vehicle = "Truck",
+    delivery_time = round(time, 1),
+    route = "Highway + road route",
+    parameter = "Heavy-load optimized"
+  )
+}
+
+# EV dispatch method
+dispatch.ev <- function(vehicle) {
+  speed <- 60
+  time <- vehicle$distance / speed * 60
+  
+  battery_used <- vehicle$distance * 0.2
+  
+  list(
+    vehicle = "EV",
+    delivery_time = round(time, 1),
+    route = "EV charging optimized route",
+    parameter = paste("Battery used:", round(battery_used, 1), "%")
+  )
+}
+
+# -------------------------------
+# SHINY WEBSITE UI
+# -------------------------------
+
+ui <- fluidPage(
+  
+  titlePanel("🚚 Polymorphic Fleet Dispatch Engine"),
+  
+  sidebarLayout(
+    
+    sidebarPanel(
+      
+      h4("Fleet Operator Panel"),
+      
+      radioButtons(
+        "vehicle",
+        "Select Vehicle:",
+        choices = c(
+          "Drone" = "drone",
+          "Truck" = "truck",
+          "EV" = "ev"
+        ),
+        selected = "drone"
+      ),
+      
+      sliderInput(
+        "distance",
+        "Delivery Distance (km):",
+        min = 5,
+        max = 200,
+        value = 50,
+        step = 5
+      ),
+      
+      sliderInput(
+        "load",
+        "Load / Payload:",
+        min = 1,
+        max = 100,
+        value = 20
+      )
+    ),
+    
+    mainPanel(
+      
+      h3("Fleet Tracking Portal"),
+      
+      h4("Dispatch Result"),
+      
+      tableOutput("result"),
+      
+      br(),
+      
+      h4("Routing Information"),
+      
+      verbatimTextOutput("routing"),
+      
+      br(),
+      
+      h4("Dispatch Engine"),
+      
+      textOutput("method")
+    )
+  )
+)
+
+# -------------------------------
+# SHINY SERVER
+# -------------------------------
+
+server <- function(input, output) {
+  
+  result <- reactive({
+    
+    if (input$vehicle == "drone") {
+      
+      vehicle <- create_drone(
+        input$distance,
+        input$load
+      )
+      
+    } else if (input$vehicle == "truck") {
+      
+      vehicle <- create_truck(
+        input$distance,
+        input$load
+      )
+      
+    } else {
+      
+      vehicle <- create_ev(
+        input$distance,
+        input$load
+      )
+    }
+    
+    # Same generic function for all vehicles
+    dispatch(vehicle)
+  })
+  
+  output$result <- renderTable({
+    
+    r <- result()
+    
+    data.frame(
+      Vehicle = r$vehicle,
+      `Delivery Time (min)` = r$delivery_time,
+      `Route Type` = r$route,
+      Parameter = r$parameter,
+      check.names = FALSE
+    )
+  })
+  
+  output$routing <- renderText({
+    
+    r <- result()
+    
+    paste(
+      "Vehicle:", r$vehicle,
+      "\nDelivery Distance:", input$distance, "km",
+      "\nEstimated Delivery Time:", r$delivery_time, "minutes",
+      "\nRouting:", r$route,
+      "\nVehicle Parameter:", r$parameter
+    )
+  })
+  
+  output$method <- renderText({
+    paste(
+      "dispatch() →",
+      class(
+        if(input$vehicle == "drone")
+          create_drone(input$distance, input$load)
+        else if(input$vehicle == "truck")
+          create_truck(input$distance, input$load)
+        else
+          create_ev(input$distance, input$load)
+      )[1]
+    )
+  })
+}
+
+# -------------------------------
+# RUN WEBSITE
+# -------------------------------
+
+shinyApp(ui = ui, server = server)
